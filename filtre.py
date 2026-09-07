@@ -1,104 +1,319 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
+import streamlit as st # 'Import' kelimesindeki 'I' harfi küçültüldü
+import requests
+
+# --------------------------------------------------
+# AYARLAR
+# --------------------------------------------------
+
+API_URL = "https://api.bist-api.com/api/v1"
+
+# API anahtarını buraya yaz
+API_KEY = st.secrets.get("API_KEY", "BURAYA_API_KEY_YAZ") # API anahtarı güvenliği için st.secrets kullanıldı, bulamazsa string'i alır
+
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}"
+}
+
+# --------------------------------------------------
+# API'DEN HİSSE VERİSİ
+# --------------------------------------------------
+
+def get_stock(symbol):
+
+    symbol = symbol.upper().strip()
+
+    url = f"{API_URL}/stocks/{symbol}"
+
+    try:
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=10
+        )
+
+        if response.status_code != 200:
+            return None
+
+        return response.json()
+
+    except Exception as e:
+        st.error(f"Veri alınamadı: {e}")
+        return None
+
+
+# --------------------------------------------------
+# TEKNİK GÖSTERGE
+# --------------------------------------------------
+
+def get_indicator(symbol, indicator):
+
+    url = f"{API_URL}/indicators/{symbol}/{indicator}"
+
+    try:
+
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=10
+        )
+
+        if response.status_code != 200:
+            return None
+
+        return response.json()
+
+    except:
+        return None
+
+
+# --------------------------------------------------
+# PUANLAMA
+# --------------------------------------------------
+
+def calculate_score(data):
+
+    score = 0
+    total = 0
+
+    results = []
+
+    # ---------------------------
+    # F/K
+    # ---------------------------
+
+    pe = data.get("pe")
+
+    if pe is not None:
+
+        total += 1
+
+        if pe < 10:
+            score += 1
+            results.append(("F/K", pe, "GEÇTİ"))
+        else:
+            results.append(("F/K", pe, "KALDI"))
+
+    # ---------------------------
+    # PD/DD
+    # ---------------------------
+
+    pb = data.get("pb")
+
+    if pb is not None:
+
+        total += 1
+
+        if pb < 2:
+            score += 1
+            results.append(("PD/DD", pb, "GEÇTİ"))
+        else:
+            results.append(("PD/DD", pb, "KALDI"))
+
+    # ---------------------------
+    # PİYASA DEĞERİ
+    # ---------------------------
+
+    market_cap = data.get("market_cap")
+
+    if market_cap is not None:
+
+        results.append(
+            ("Piyasa Değeri", market_cap, "-")
+        )
+
+    return score, total, results
+
+
+# --------------------------------------------------
+# ARAYÜZ
+# --------------------------------------------------
 
 st.set_page_config(
-    page_title="BIST Hisse Filtresi",
+    page_title="BIST Hisse Analiz",
     page_icon="📈",
     layout="wide"
 )
 
-st.title("📈 BIST Hisse Filtreleme Uygulaması")
+st.title("📈 BIST Hisse Filtreleme & Analiz")
 
-dosya = st.file_uploader(
-    "Hisse verilerini yükle",
-    type=["csv", "xlsx"]
+st.write(
+    "Hisse kodunu girerek fiyat, finansal veriler "
+    "ve filtreleme sonuçlarını görüntüleyebilirsin."
 )
 
-if dosya is not None:
-    try:
-        if dosya.name.endswith(".csv"):
-            df = pd.read_csv(dosya)
+# --------------------------------------------------
+# HİSSE ARAMA
+# --------------------------------------------------
+
+symbol = st.text_input(
+    "Hisse kodu",
+    placeholder="Örn: TUPRS, THYAO, ASELS"
+)
+
+analyze = st.button(
+    "🔎 HİSSEYİ ANALİZ ET",
+    use_container_width=True
+)
+
+# --------------------------------------------------
+# ANALİZ
+# --------------------------------------------------
+
+if analyze:
+
+    if not symbol:
+
+        st.warning("Lütfen bir hisse kodu gir.")
+
+    else:
+
+        with st.spinner("Hisse verileri alınıyor..."):
+
+            data = get_stock(symbol)
+
+        if data is None:
+
+            st.error(
+                "Hisse bulunamadı veya API verisi alınamadı."
+            )
+
         else:
-            df = pd.read_excel(dosya)
-    except Exception as e:
-        st.error(f"Dosya okunurken bir hata oluştu: {e}")
-        st.stop()
 
-    st.sidebar.header("🔎 Filtreler")
+            # --------------------------------------------------
+            # TEMEL BİLGİLER
+            # --------------------------------------------------
 
-    hedef_kolonlar = [
-        "Fiyat", "FK", "PD/DD", "FD/FAVÖK", "Temettu",
-        "ROE", "ROIC", "Ciro Buyume", "Kar Buyume", "Borç/Ozsermaye"
-    ]
+            st.subheader(
+                f"📊 {symbol.upper()} Analizi"
+            )
 
-    mevcut = [x for x in hedef_kolonlar if x in df.columns]
+            col1, col2, col3, col4 = st.columns(4)
 
-    # Veri tiplerini sayısal tipe dönüştürme (string/virgül hatalarına karşı)
-    for col in mevcut:
-        if df[col].dtype == "object":
-            df[col] = df[col].astype(str).str.replace(",", ".").str.replace("%", "")
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+            price = data.get(
+                "current_price",
+                data.get("price", "-")
+            )
 
-    filtreler = {}
+            change = data.get(
+                "change_percent",
+                data.get("change", "-")
+            )
 
-    for kolon in mevcut:
-        seri = df[kolon].dropna()
+            volume = data.get(
+                "volume",
+                "-"
+            )
 
-        # Sütun tamamen boşsa atla
-        if seri.empty:
-            continue
+            market_cap = data.get(
+                "market_cap",
+                "-"
+            )
 
-        min_val = float(seri.min())
-        max_val = float(seri.max())
+            col1.metric(
+                "Anlık Fiyat",
+                f"{price} TL"
+            )
 
-        # Min ve Max eşitse slider yerine sabit bilgi ver veya ufak pay ekle
-        if min_val == max_val:
-            st.sidebar.caption(f"*{kolon}*: Sabit Değer ({min_val})")
-            continue
+            col2.metric(
+                "Değişim",
+                f"%{change}"
+            )
 
-        filtreler[kolon] = st.sidebar.slider(
-            label=kolon,
-            min_value=min_val,
-            max_value=max_val,
-            value=(min_val, max_val),
-            step=(max_val - min_val) / 100 if max_val != min_val else 0.1
-        )
+            col3.metric(
+                "Hacim",
+                str(volume)
+            )
 
-    # NaN değerleri korumak isteyip istemediğini sor
-    nan_dahil_et = st.sidebar.checkbox("Eksik (NaN) Verili Hisseleri Koru", value=False)
+            col4.metric(
+                "Piyasa Değeri",
+                str(market_cap)
+            )
 
-    # Filtreleme mantığı
-    sonuc = df.copy()
-    for kolon, aralik in filtreler.items():
-        kriter = (sonuc[kolon] >= aralik[0]) & (sonuc[kolon] <= aralik[1])
-        if nan_dahil_et:
-            kriter = kriter | sonuc[kolon].isna()
-        sonuc = sonuc[kriter]
+            # --------------------------------------------------
+            # FİNANSAL ORANLAR
+            # --------------------------------------------------
 
-    st.subheader(f"📊 {len(sonuc)} hisse bulundu")
+            st.subheader("📌 Finansal Oranlar")
 
-    # Sonuç ekranı
-    st.dataframe(
-        sonuc,
-        use_container_width=True,
-        hide_index=True
-    )
+            pe = data.get("pe", "-")
+            pb = data.get("pb", "-")
+            eps = data.get("eps", "-")
+            beta = data.get("beta", "-")
 
-    # İndirme Butonu
-    csv_cikti = sonuc.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="📥 Filtrelenmiş Listeyi İndir (CSV)",
-        data=csv_cikti,
-        file_name="filtrelenmis_hisseler.csv",
-        mime="text/csv"
-    )
+            c1, c2, c3, c4 = st.columns(4)
 
-else:
-    st.info("Başlamak için hisse verilerini CSV veya Excel dosyası olarak yükle.")
-    st.markdown("""
-    ### Örnek Veri Formatı
-    Yükleyeceğiniz tabloda şu sütun isimlerinin yer alması filtrenin otomatik algılamasını sağlar:
-    * Hisse, Fiyat, FK, PD/DD, FD/FAVÖK
-    * Temettu, ROE, ROIC, Ciro Buyume, Kar Buyume, Borç/Ozsermaye
-    """)
+            c1.metric("F/K", pe)
+            c2.metric("PD/DD", pb)
+            c3.metric("EPS", eps)
+            c4.metric("Beta", beta)
+
+            # --------------------------------------------------
+            # PUANLAMA
+            # --------------------------------------------------
+
+            score, total, results = calculate_score(data)
+
+            st.subheader("🎯 Filtre Sonucu")
+
+            if total > 0:
+
+                percentage = (
+                    score / total
+                ) * 100
+
+                st.progress(
+                    percentage / 100
+                )
+
+                st.metric(
+                    "Genel Skor",
+                    f"{score}/{total}"
+                )
+
+                if percentage >= 80:
+
+                    st.success(
+                        "🟢 Hisse kriterlere büyük ölçüde uyuyor."
+                    )
+
+                elif percentage >= 50:
+
+                    st.warning(
+                        "🟡 Hisse orta seviyede uygun."
+                    )
+
+                else:
+
+                    st.error(
+                        "🔴 Hisse belirlenen kriterleri karşılamıyor."
+                    )
+
+            # --------------------------------------------------
+            # KRİTERLER
+            # --------------------------------------------------
+
+            st.subheader("🔍 Kriter Detayları")
+
+            for name, value, result in results:
+
+                if result == "GEÇTİ":
+
+                    st.success(
+                        f"✅ {name}: {value}"
+                    )
+
+                elif result == "KALDI":
+
+                    st.error(
+                        f"❌ {name}: {value}"
+                    )
+
+                else:
+
+                    st.info(
+                        f"ℹ️ {name}: {value}"
+                    )
+
+            st.caption(
+                "Bu uygulama yatırım tavsiyesi değildir."
+            )
