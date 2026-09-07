@@ -1,40 +1,31 @@
-import streamlit as st # 'Import' kelimesindeki I harfi küçük olacak şekilde düzeltildi
-import requests
+import streamlit as st
+import yfinance as yf # DEĞİŞTİRİLEN KISIM: requests yerine yfinance kütüphanesi eklendi
 
 # --------------------------------------------------
-# AYARLAR
-# --------------------------------------------------
-
-API_URL = "https://api.bist-api.com/api/v1"
-
-# API anahtarını buraya yaz
-API_KEY = "BURAYA_API_KEY_YAZ"
-
-HEADERS = {
-    "Authorization": f"Bearer {API_KEY}"
-}
-
-# --------------------------------------------------
-# API'DEN HİSSE VERİSİ
+# YFINANCE'TAN HİSSE VERİSİ # DEĞİŞTİRİLEN KISIM: Gereksiz API ayarları tamamen silindi
 # --------------------------------------------------
 
 def get_stock(symbol):
 
     symbol = symbol.upper().strip()
 
-    url = f"{API_URL}/stocks/{symbol}"
-
     try:
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            timeout=10
-        )
+        stock = yf.Ticker(f"{symbol}.IS") # DEĞİŞTİRİLEN KISIM: BIST hisseleri için sembol sonuna .IS uzantısı eklendi
+        info = stock.info # DEĞİŞTİRİLEN KISIM: yfinance üzerinden hisse bilgileri sözlük (dictionary) olarak çekildi
 
-        if response.status_code != 200:
+        if "symbol" not in info and "shortName" not in info: # DEĞİŞTİRİLEN KISIM: Hissenin Yahoo Finance'te olup olmadığı kontrol edildi
             return None
 
-        return response.json()
+        return { # DEĞİŞTİRİLEN KISIM: Eski API formatındaki değerler yfinance veri anahtarlarıyla eşleştirildi
+            "current_price": info.get("currentPrice", info.get("regularMarketPrice", "-")),
+            "pe": info.get("trailingPE", None),
+            "pb": info.get("priceToBook", None),
+            "market_cap": info.get("marketCap", "-"),
+            "eps": info.get("trailingEps", "-"),
+            "beta": info.get("beta", "-"),
+            "volume": info.get("volume", "-"),
+            "change_percent": "-" # DEĞİŞTİRİLEN KISIM: Anlık değişim yüzdesi yfinance'te karmaşık geldiği için şimdilik statik bırakıldı
+        }
 
     except Exception as e:
         st.error(f"Veri alınamadı: {e}")
@@ -46,24 +37,8 @@ def get_stock(symbol):
 # --------------------------------------------------
 
 def get_indicator(symbol, indicator):
-
-    url = f"{API_URL}/indicators/{symbol}/{indicator}"
-
-    try:
-
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            timeout=10
-        )
-
-        if response.status_code != 200:
-            return None
-
-        return response.json()
-
-    except:
-        return None
+    
+    return None # DEĞİŞTİRİLEN KISIM: Sahte API linki silindiği için fonksiyon geçici olarak devre dışı bırakıldı
 
 
 # --------------------------------------------------
