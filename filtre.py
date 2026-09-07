@@ -1,4 +1,4 @@
-import streamlit as st # 'Import' kelimesindeki 'I' harfi küçültüldü
+import streamlit as st # 'Import' kelimesindeki I harfi küçük olacak şekilde düzeltildi
 import requests
 
 # --------------------------------------------------
@@ -8,7 +8,7 @@ import requests
 API_URL = "https://api.bist-api.com/api/v1"
 
 # API anahtarını buraya yaz
-API_KEY = st.secrets.get("API_KEY", "BURAYA_API_KEY_YAZ") # API anahtarı güvenliği için st.secrets kullanıldı, bulamazsa string'i alır
+API_KEY = "BURAYA_API_KEY_YAZ"
 
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}"
